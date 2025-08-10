@@ -1,0 +1,4 @@
+requests>=2.32.0
+cryptography>=45.0.0
+PyYAML>=6.0.0
+# Using direct REST API calls instead of openstacksdk to avoid psutil dependency

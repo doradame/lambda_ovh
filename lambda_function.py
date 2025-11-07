@@ -13,6 +13,7 @@ REQUIRED_ENVS = [
     "OS_USERNAME",
     "OS_PASSWORD",
     "OS_PROJECT_ID",
+    "API_KEY",          # API key per autenticare le chiamate alla lambda
 ]
 
 def _json(status, body):
@@ -23,6 +24,34 @@ def _require_envs():
     missing = [k for k in REQUIRED_ENVS if not os.environ.get(k)]
     if missing:
         raise RuntimeError(f"Missing required envs: {', '.join(missing)}")
+
+def _check_api_key(event):
+    """
+    Verifica l'API key dalla richiesta.
+    L'API key può essere fornita tramite:
+    - Header 'X-API-Key'
+    - Query parameter 'api_key'
+    """
+    expected_api_key = os.environ.get("API_KEY")
+    if not expected_api_key:
+        raise RuntimeError("API_KEY environment variable not configured")
+    
+    # Controlla negli headers
+    headers = (event or {}).get("headers") or {}
+    provided_api_key = headers.get("X-API-Key") or headers.get("x-api-key")
+    
+    # Se non trovata negli headers, controlla nei query parameters
+    if not provided_api_key:
+        qs = (event or {}).get("queryStringParameters") or {}
+        provided_api_key = qs.get("api_key")
+    
+    if not provided_api_key:
+        raise RuntimeError("API key not provided. Use X-API-Key header or api_key query parameter")
+    
+    if provided_api_key != expected_api_key:
+        raise RuntimeError("Invalid API key")
+    
+    log.info("API key validation successful")
 
 def _get_token_and_compute_url(region):
     """
@@ -107,6 +136,13 @@ def _make_compute_request(method, path, token, compute_endpoint, data=None):
 def lambda_handler(event, context):
     try:
         _require_envs()
+        
+        # Verifica API key prima di tutto
+        try:
+            _check_api_key(event)
+        except RuntimeError as e:
+            log.warning(f"API key validation failed: {str(e)}")
+            return _json(401, {"error": "unauthorized", "message": str(e)})
         
         qs = (event or {}).get("queryStringParameters") or {}
         action = (qs.get("action") or "status").lower().strip()

@@ -20,7 +20,8 @@ This AWS Lambda function manages OpenStack instances via shelve/unshelve operati
    - Configure environment variables (see below)
 
 4. **Test:**
-   - GET `https://your-lambda-url?action=status`
+   - GET `https://your-lambda-url?action=status&api_key=your-secret-key`
+   - Or use header: `curl -H "X-API-Key: your-secret-key" "https://your-lambda-url?action=status"`
 
 ## Prerequisites
 
@@ -107,6 +108,7 @@ OS_AUTH_URL=https://auth.cloud.ovh.net/v3
 OS_USERNAME=myuser
 OS_PASSWORD=mypassword
 OS_PROJECT_ID=9460d381e9714cc8af9cccb5dc86a271
+API_KEY=your-secret-api-key-here
 
 # Optional if provided via query parameters
 OS_REGION_NAME=GRA9
@@ -119,13 +121,57 @@ Lambda function.
 
 ## API Usage
 
-The Lambda function accepts GET requests with query parameters:
+The Lambda function accepts GET requests with query parameters and requires authentication:
 
+### Authentication
+Provide API key using one of these methods:
+- **Header** (recommended): `X-API-Key: your-secret-key`
+- **Query parameter**: `api_key=your-secret-key`
+
+### Parameters
 - `action` (required) - `status`, `start` or `stop`
 - `region` (optional) - overrides `OS_REGION_NAME` environment variable
 - `instance_id` (optional) - overrides `INSTANCE_ID` environment variable
 
-Example: `?action=status&region=GRA9&instance_id=54cbb827-fc6c-40e8-bc38-c5876f4c0573`
+### Examples
+
+**Esempio completo con instance ID e region specifici:**
+
+**Using header (recommended):**
+```bash
+# Verifica stato dell'istanza
+curl -H "X-API-Key: mySecretKey123" \
+     "https://abc123def456.lambda-url.eu-west-1.on.aws/?action=status&region=GRA9&instance_id=54cbb827-fc6c-40e8-bc38-c5876f4c0573"
+
+# Avvia l'istanza (unshelve)
+curl -H "X-API-Key: mySecretKey123" \
+     "https://abc123def456.lambda-url.eu-west-1.on.aws/?action=start&re=GRA9&instance_id=54cbb827-fc6c-40e8-bc38-c5876f4c0573"
+
+# Ferma l'istanza (shelve)
+curl -H "X-API-Key: mySecretKey123" \
+     "https://abc123def456.lambda-url.eu-west-1.on.aws/?action=stop&region=GRA9&instance_id=54cbb827-fc6c-40e8-bc38-c5876f4c0573"
+```
+
+**Using query parameter:**
+```bash
+# Verifica stato dell'istanza
+curl "https://abc123def456.lambda-url.eu-west-1.on.aws/?action=status&api_key=mySecretKey123&region=GRA9&instance_id=54cbb827-fc6c-40e8-bc38-c5876f4c0573"
+
+# Gestione istanza in regione diversa (es. SBG5)
+curl "https://abc123def456.lambda-url.eu-west-1.on.aws/?action=status&api_key=mySecretKey123&region=SBG5&instance_id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+**Esempi di response JSON:**
+```json
+// Status response
+{"instance_id": "54cbb827-fc6c-40e8-bc38-c5876f4c0573", "state": "ACTIVE"}
+
+// Start response
+{"message": "start requested", "from_state": "SHUTOFF"}
+
+// Stop response
+{"message": "shelve requested from ACTIVE"}
+```
 
 ## Handler Example
 
@@ -151,10 +197,11 @@ The OpenStack user must have permissions for:
 
 **Common Issues:**
 
-1. **Import errors on Lambda:** Use Docker build (Option 1) to ensure Linux compatibility
-2. **403 Forbidden errors:** Check OpenStack user permissions for compute and image operations
-3. **Connection timeouts:** Verify OpenStack credentials and network connectivity
-4. **Instance not found:** Confirm the `INSTANCE_ID` value (env var or query parameter) is correct
+1. **401 Unauthorized errors:** Check that API key is provided correctly via header or query parameter
+2. **Import errors on Lambda:** Use Docker build (Option 1) to ensure Linux compatibility
+3. **403 Forbidden errors:** Check OpenStack user permissions for compute and image operations
+4. **Connection timeouts:** Verify OpenStack credentials and network connectivity
+5. **Instance not found:** Confirm the `INSTANCE_ID` value (env var or query parameter) is correct
 
 ## Notes
 

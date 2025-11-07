@@ -86,19 +86,36 @@ Then upload `lambda_deployment.zip` to AWS Lambda and set the handler name to `l
    ```
 
 4. **Test different actions:**
-   Modify the `test_event` in the `__main__` block:
-
+   
+   **Formato JSON corretto per test AWS Lambda:**
+   ```python
+   test_event = {
+       "headers": {
+           "X-API-Key": "your-secret-key"  # or use queryStringParameters.api_key
+       },
+       "queryStringParameters": {
+           "action": "status",  # or "start" or "stop"
+           "region": "GRA9",
+           "instance_id": "c68d64f8-56c9-4bc9-8984-52182204733f"
+       }
+   }
+   ```
+   
+   **Alternativo con API key nei query parameters:**
    ```python
    test_event = {
        "queryStringParameters": {
-           "action": "status"  # or "start" or "stop"
+           "action": "status",
+           "api_key": "your-secret-key",
+           "region": "GRA9", 
+           "instance_id": "c68d64f8-56c9-4bc9-8984-52182204733f"
        }
    }
    ```
 
 ## Environment Variables
 
-### Environment Variables
+## Environment Variables
 
 Configure these environment variables in your AWS Lambda function:
 
@@ -108,12 +125,19 @@ OS_AUTH_URL=https://auth.cloud.ovh.net/v3
 OS_USERNAME=myuser
 OS_PASSWORD=mypassword
 OS_PROJECT_ID=9460d381e9714cc8af9cccb5dc86a271
-API_KEY=your-secret-api-key-here
+
+# Optional - API Key Authentication (disabled by default)
+# API_KEY=your-secret-api-key-here  # Only needed if ENABLE_API_KEY=True in code
 
 # Optional if provided via query parameters
 OS_REGION_NAME=GRA9
 INSTANCE_ID=54cbb827-fc6c-40e8-bc38-c5876f4c0573
 ```
+
+**API Key Configuration:**
+- API key authentication is **disabled by default** for backward compatibility
+- To enable: Set `ENABLE_API_KEY = True` in `lambda_function.py` and configure `API_KEY` environment variable
+- When disabled, the lambda works without authentication like previous versions
 
 `OS_REGION_NAME` and `INSTANCE_ID` can be overridden by passing
 `region` and `instance_id` as query string parameters when invoking the
@@ -121,10 +145,13 @@ Lambda function.
 
 ## API Usage
 
-The Lambda function accepts GET requests with query parameters and requires authentication:
+The Lambda function accepts GET requests with query parameters. Authentication is optional (disabled by default):
 
-### Authentication
-Provide API key using one of these methods:
+### Authentication (Optional)
+
+**Note:** API key authentication is **disabled by default** for backward compatibility.
+
+When enabled (`ENABLE_API_KEY = True` in code), provide API key using one of these methods:
 - **Header** (recommended): `X-API-Key: your-secret-key`
 - **Query parameter**: `api_key=your-secret-key`
 

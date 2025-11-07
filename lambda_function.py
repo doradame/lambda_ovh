@@ -6,6 +6,14 @@ import requests
 log = logging.getLogger()
 log.setLevel(logging.INFO)
 
+# CONFIGURAZIONE API KEY
+# ======================
+# Per abilitare l'autenticazione API key, impostare ENABLE_API_KEY = True
+# e configurare la variabile d'ambiente API_KEY.
+# 
+# Quando disabilitata (ENABLE_API_KEY = False), la lambda funziona senza 
+# autenticazione per mantenere la retrocompatibilità con versioni precedenti.
+
 # Variabili d'ambiente necessarie: siamo tornati a username/password!
 # REGION e INSTANCE_ID possono essere passati via query string.
 REQUIRED_ENVS = [
@@ -13,8 +21,14 @@ REQUIRED_ENVS = [
     "OS_USERNAME",
     "OS_PASSWORD",
     "OS_PROJECT_ID",
-    "API_KEY",          # API key per autenticare le chiamate alla lambda
 ]
+
+# Configurazione API key: impostare su True per abilitare l'autenticazione
+ENABLE_API_KEY = False  # Disabilitata per retrocompatibilità
+
+# Se API key è abilitata, aggiunge API_KEY ai requisiti
+if ENABLE_API_KEY:
+    REQUIRED_ENVS.append("API_KEY")
 
 def _json(status, body):
     return {"statusCode": status, "headers": {"Content-Type": "application/json"},
@@ -27,11 +41,17 @@ def _require_envs():
 
 def _check_api_key(event):
     """
-    Verifica l'API key dalla richiesta.
+    Verifica l'API key dalla richiesta se abilitata.
     L'API key può essere fornita tramite:
     - Header 'X-API-Key'
     - Query parameter 'api_key'
+    
+    Se ENABLE_API_KEY è False, questa funzione non fa nulla.
     """
+    if not ENABLE_API_KEY:
+        log.info("API key authentication is disabled")
+        return  # Skip API key validation
+    
     expected_api_key = os.environ.get("API_KEY")
     if not expected_api_key:
         raise RuntimeError("API_KEY environment variable not configured")
@@ -137,12 +157,13 @@ def lambda_handler(event, context):
     try:
         _require_envs()
         
-        # Verifica API key prima di tutto
-        try:
-            _check_api_key(event)
-        except RuntimeError as e:
-            log.warning(f"API key validation failed: {str(e)}")
-            return _json(401, {"error": "unauthorized", "message": str(e)})
+        # Verifica API key solo se abilitata
+        if ENABLE_API_KEY:
+            try:
+                _check_api_key(event)
+            except RuntimeError as e:
+                log.warning(f"API key validation failed: {str(e)}")
+                return _json(401, {"error": "unauthorized", "message": str(e)})
         
         qs = (event or {}).get("queryStringParameters") or {}
         action = (qs.get("action") or "status").lower().strip()

@@ -7,13 +7,12 @@ log = logging.getLogger()
 log.setLevel(logging.INFO)
 
 # Variabili d'ambiente necessarie: siamo tornati a username/password!
+# REGION e INSTANCE_ID possono essere passati via query string.
 REQUIRED_ENVS = [
     "OS_AUTH_URL",      # Questo è l'endpoint per l'autenticazione
     "OS_USERNAME",
     "OS_PASSWORD",
     "OS_PROJECT_ID",
-    "OS_REGION_NAME",
-    "INSTANCE_ID",
 ]
 
 def _json(status, body):
@@ -25,15 +24,16 @@ def _require_envs():
     if missing:
         raise RuntimeError(f"Missing required envs: {', '.join(missing)}")
 
-def _get_token_and_compute_url():
+def _get_token_and_compute_url(region):
     """
     Autenticati con username/password per ottenere un token e l'endpoint del servizio Compute.
+
+    :param region: nome della regione da utilizzare per il service catalog
     """
     auth_url = os.environ["OS_AUTH_URL"]
     username = os.environ["OS_USERNAME"]
     password = os.environ["OS_PASSWORD"]
     project_id = os.environ["OS_PROJECT_ID"]
-    region = os.environ["OS_REGION_NAME"]
 
     # Corpo della richiesta di autenticazione v3 di OpenStack
     auth_payload = {
@@ -108,9 +108,6 @@ def lambda_handler(event, context):
     try:
         _require_envs()
         
-        # Ottieni un token fresco a ogni esecuzione!
-        token, compute_endpoint = _get_token_and_compute_url()
-
         qs = (event or {}).get("queryStringParameters") or {}
         action = (qs.get("action") or "status").lower().strip()
 
@@ -118,7 +115,19 @@ def lambda_handler(event, context):
         if action not in allowed:
             return _json(400, {"error": "invalid_action", "allowed": list(allowed)})
 
-        instance_id = os.environ["INSTANCE_ID"]
+        region = qs.get("region") or os.environ.get("OS_REGION_NAME")
+        instance_id = qs.get("instance_id") or os.environ.get("INSTANCE_ID")
+
+        missing = []
+        if not region:
+            missing.append("region")
+        if not instance_id:
+            missing.append("instance_id")
+        if missing:
+            return _json(400, {"error": "missing_parameters", "missing": missing})
+
+        # Ottieni un token fresco a ogni esecuzione!
+        token, compute_endpoint = _get_token_and_compute_url(region)
 
         server_data = _make_compute_request("GET", f"/servers/{instance_id}", token, compute_endpoint)
         if not server_data or "server" not in server_data:

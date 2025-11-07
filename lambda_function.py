@@ -6,27 +6,27 @@ import requests
 log = logging.getLogger()
 log.setLevel(logging.INFO)
 
-# CONFIGURAZIONE API KEY
-# ======================
-# Per abilitare l'autenticazione API key, impostare ENABLE_API_KEY = True
-# e configurare la variabile d'ambiente API_KEY.
+# API KEY CONFIGURATION
+# ====================
+# To enable API key authentication, set ENABLE_API_KEY = True
+# and configure the API_KEY environment variable.
 # 
-# Quando disabilitata (ENABLE_API_KEY = False), la lambda funziona senza 
-# autenticazione per mantenere la retrocompatibilità con versioni precedenti.
+# When disabled (ENABLE_API_KEY = False), the lambda works without 
+# authentication to maintain backward compatibility with previous versions.
 
-# Variabili d'ambiente necessarie: siamo tornati a username/password!
-# REGION e INSTANCE_ID possono essere passati via query string.
+# Required environment variables: we're back to username/password!
+# REGION and INSTANCE_ID can be passed via query string.
 REQUIRED_ENVS = [
-    "OS_AUTH_URL",      # Questo è l'endpoint per l'autenticazione
+    "OS_AUTH_URL",      # This is the endpoint for authentication
     "OS_USERNAME",
     "OS_PASSWORD",
     "OS_PROJECT_ID",
 ]
 
-# Configurazione API key: impostare su True per abilitare l'autenticazione
-ENABLE_API_KEY = False  # Disabilitata per retrocompatibilità
+# API key configuration: set to True to enable authentication
+ENABLE_API_KEY = False  # Disabled for backward compatibility
 
-# Se API key è abilitata, aggiunge API_KEY ai requisiti
+# If API key is enabled, add API_KEY to requirements
 if ENABLE_API_KEY:
     REQUIRED_ENVS.append("API_KEY")
 
@@ -41,12 +41,12 @@ def _require_envs():
 
 def _check_api_key(event):
     """
-    Verifica l'API key dalla richiesta se abilitata.
-    L'API key può essere fornita tramite:
+    Verifies the API key from the request if enabled.
+    The API key can be provided via:
     - Header 'X-API-Key'
     - Query parameter 'api_key'
     
-    Se ENABLE_API_KEY è False, questa funzione non fa nulla.
+    If ENABLE_API_KEY is False, this function does nothing.
     """
     if not ENABLE_API_KEY:
         log.info("API key authentication is disabled")
@@ -56,11 +56,11 @@ def _check_api_key(event):
     if not expected_api_key:
         raise RuntimeError("API_KEY environment variable not configured")
     
-    # Controlla negli headers
+    # Check in headers
     headers = (event or {}).get("headers") or {}
     provided_api_key = headers.get("X-API-Key") or headers.get("x-api-key")
     
-    # Se non trovata negli headers, controlla nei query parameters
+    # If not found in headers, check query parameters
     if not provided_api_key:
         qs = (event or {}).get("queryStringParameters") or {}
         provided_api_key = qs.get("api_key")
@@ -75,16 +75,16 @@ def _check_api_key(event):
 
 def _get_token_and_compute_url(region):
     """
-    Autenticati con username/password per ottenere un token e l'endpoint del servizio Compute.
+    Authenticate with username/password to get a token and Compute service endpoint.
 
-    :param region: nome della regione da utilizzare per il service catalog
+    :param region: region name to use for the service catalog
     """
     auth_url = os.environ["OS_AUTH_URL"]
     username = os.environ["OS_USERNAME"]
     password = os.environ["OS_PASSWORD"]
     project_id = os.environ["OS_PROJECT_ID"]
 
-    # Corpo della richiesta di autenticazione v3 di OpenStack
+    # OpenStack v3 authentication request body
     auth_payload = {
         "auth": {
             "identity": {
@@ -105,20 +105,20 @@ def _get_token_and_compute_url(region):
         }
     }
 
-    # L'URL per ottenere il token è l'endpoint di autenticazione + /auth/tokens
+    # The URL to get the token is the authentication endpoint + /auth/tokens
     token_url = f"{auth_url.rstrip('/')}/auth/tokens"
     
     log.info(f"Requesting token from: {token_url}")
     response = requests.post(token_url, json=auth_payload)
     response.raise_for_status()
 
-    # Il token viene restituito negli header della risposta!
+    # The token is returned in the response headers!
     token = response.headers['X-Subject-Token']
     
-    # Il corpo della risposta contiene il "service catalog" con gli URL di tutti i servizi
+    # The response body contains the "service catalog" with URLs of all services
     service_catalog = response.json()['token']['catalog']
     
-    # Troviamo l'URL del servizio "compute" per la nostra regione
+    # Find the URL of the "compute" service for our region
     compute_endpoint = None
     for service in service_catalog:
         if service['type'] == 'compute':
@@ -136,7 +136,7 @@ def _get_token_and_compute_url(region):
     return token, compute_endpoint
 
 def _make_compute_request(method, path, token, compute_endpoint, data=None):
-    """Fa una richiesta all'API di OpenStack Compute."""
+    """Makes a request to the OpenStack Compute API."""
     url = f"{compute_endpoint.rstrip('/')}{path}"
     log.info(f"Making request to: {url}")
     
@@ -148,7 +148,7 @@ def _make_compute_request(method, path, token, compute_endpoint, data=None):
     response = requests.request(method, url, headers=headers, json=data)
     response.raise_for_status()
     
-    # Alcune risposte (es. POST) potrebbero non avere corpo
+    # Some responses (e.g., POST) might not have a body
     if response.status_code != 204 and response.content:
         return response.json()
     return None
@@ -157,7 +157,7 @@ def lambda_handler(event, context):
     try:
         _require_envs()
         
-        # Verifica API key solo se abilitata
+        # Verify API key only if enabled
         if ENABLE_API_KEY:
             try:
                 _check_api_key(event)
@@ -183,7 +183,7 @@ def lambda_handler(event, context):
         if missing:
             return _json(400, {"error": "missing_parameters", "missing": missing})
 
-        # Ottieni un token fresco a ogni esecuzione!
+        # Get a fresh token on each execution!
         token, compute_endpoint = _get_token_and_compute_url(region)
 
         server_data = _make_compute_request("GET", f"/servers/{instance_id}", token, compute_endpoint)
@@ -221,6 +221,6 @@ def lambda_handler(event, context):
 
     except Exception as e:
         log.exception("Unhandled error")
-        # Includi più dettagli nell'errore per il debug
+        # Include more details in the error for debugging
         error_detail = f"{type(e).__name__}: {str(e)}"
         return _json(500, {"error": "internal_error", "detail": error_detail})

@@ -103,21 +103,29 @@ Configure these environment variables in your AWS Lambda function:
 
 ```bash
 # Required Variables
-OS_AUTH_TOKEN=gAAAAABm_your_openstack_token_here
+OS_AUTH_URL=https://auth.cloud.ovh.net/v3
+OS_USERNAME=myuser
+OS_PASSWORD=mypassword
 OS_PROJECT_ID=9460d381e9714cc8af9cccb5dc86a271
+
+# Optional if provided via query parameters
 OS_REGION_NAME=GRA9
 INSTANCE_ID=54cbb827-fc6c-40e8-bc38-c5876f4c0573
 ```
 
-**Note**: Using a pre-generated OpenStack token simplifies authentication and avoids credential management in Lambda.
+`OS_REGION_NAME` and `INSTANCE_ID` can be overridden by passing
+`region` and `instance_id` as query string parameters when invoking the
+Lambda function.
 
 ## API Usage
 
 The Lambda function accepts GET requests with query parameters:
 
-- `?action=status` - Get instance status
-- `?action=start` - Start/unshelve the instance
-- `?action=stop` - Shelve the instance (stops compute costs)
+- `action` (required) - `status`, `start` or `stop`
+- `region` (optional) - overrides `OS_REGION_NAME` environment variable
+- `instance_id` (optional) - overrides `INSTANCE_ID` environment variable
+
+Example: `?action=status&region=GRA9&instance_id=54cbb827-fc6c-40e8-bc38-c5876f4c0573`
 
 ## Handler Example
 
@@ -146,7 +154,7 @@ The OpenStack user must have permissions for:
 1. **Import errors on Lambda:** Use Docker build (Option 1) to ensure Linux compatibility
 2. **403 Forbidden errors:** Check OpenStack user permissions for compute and image operations
 3. **Connection timeouts:** Verify OpenStack credentials and network connectivity
-4. **Instance not found:** Confirm `INSTANCE_ID` environment variable is correct
+4. **Instance not found:** Confirm the `INSTANCE_ID` value (env var or query parameter) is correct
 
 ## Notes
 

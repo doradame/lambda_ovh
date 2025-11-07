@@ -74,7 +74,7 @@ def _get_token_and_compute_url(region):
     for service in service_catalog:
         if service['type'] == 'compute':
             for endpoint in service['endpoints']:
-                if endpoint['region'] == region and endpoint['interface'] == 'public':
+                if endpoint['region_id'] == region and endpoint['interface'] == 'public':
                     compute_endpoint = endpoint['url']
                     break
             if compute_endpoint:
@@ -144,7 +144,6 @@ def lambda_handler(event, context):
             if state in {"SHELVED", "SHELVED_OFFLOADED"}:
                 _make_compute_request("POST", f"/servers/{instance_id}/action", token, compute_endpoint, {"unshelve": None})
                 return _json(200, {"message": "unshelve requested", "from_state": state})
-            # ... resto della logica ...
             if state == "ACTIVE":
                 return _json(200, {"message": "already active"})
             _make_compute_request("POST", f"/servers/{instance_id}/action", token, compute_endpoint, {"os-start": None})
@@ -156,8 +155,12 @@ def lambda_handler(event, context):
             if state == "ACTIVE":
                 _make_compute_request("POST", f"/servers/{instance_id}/action", token, compute_endpoint, {"shelve": None})
                 return _json(200, {"message": "shelve requested from ACTIVE"})
-            # ... resto della logica ...
-            return _json(400, {"error": "invalid_state_for_shelve", "message": f"Cannot shelve from state {state}"})
+            if state == "SHUTOFF":
+                _make_compute_request("POST", f"/servers/{instance_id}/action", token, compute_endpoint, {"shelve": None})
+                return _json(200, {"message": "shelve requested from SHUTOFF"})
+            # fallback: try shelve anyway
+            _make_compute_request("POST", f"/servers/{instance_id}/action", token, compute_endpoint, {"shelve": None})
+            return _json(200, {"message": "shelve requested", "from_state": state})
 
     except Exception as e:
         log.exception("Unhandled error")
